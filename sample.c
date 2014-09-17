@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <sys/filio.h>
+//#include <sys/filio.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -114,7 +114,10 @@ int main(int argc,char **argv)
   while(1) {
     int client_sock = accept_incoming(master_socket);
     if (client_sock!=-1) {
-      // Got connection -- do something with it.
+      char buffer[1024];
+      sprintf(buffer, ":littleirc 020 * :Heyooooo\n");
+      write(client_sock, buffer, strlen(buffer));
+      close(client_sock);
     }
   }
 }

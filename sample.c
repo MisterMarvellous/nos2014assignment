@@ -57,6 +57,32 @@ struct client_thread {
 
 pthread_rwlock_t message_log_lock;
 
+int read_from_socket(int sock,unsigned char *buffer,int *count,int buffer_size,
+		     int timeout)
+{
+  fcntl(sock,F_SETFL,fcntl(sock, F_GETFL, NULL)|O_NONBLOCK);
+
+
+  int t=time(0)+timeout;
+  if (*count>=buffer_size) return 0;
+  int r=read(sock,&buffer[*count],buffer_size-*count);
+  while(r!=0) {
+    if (r>0) {
+      (*count)+=r;
+      break;
+    }
+    r=read(sock,&buffer[*count],buffer_size-*count);
+    if (r==-1&&errno!=EAGAIN) {
+      perror("read() returned error. Stopping reading from socket.");
+      return -1;
+    } else usleep(100000);
+    // timeout after a few seconds of nothing
+    if (time(0)>=t) break;
+  }
+  buffer[*count]=0;
+  return 0;
+}
+
 int create_listen_socket(int port)
 {
   int sock = socket(AF_INET,SOCK_STREAM,0);
@@ -98,6 +124,56 @@ int accept_incoming(int sock)
   return -1;
 }
 
+int connection_count=0;
+
+int handle_connection(int fd) {
+  printf("I have now seen %d connections.\n", ++connection_count);
+  char msg[1024];
+  sprintf(msg, ":toddsircserver.com 020 * :Heyooooo\n");
+  write(fd, msg, strlen(msg));
+
+  unsigned char buffer[8192];
+  int length=0;
+  int registered=0;
+
+  while(1) {
+    length=0;
+    read_from_socket(fd, buffer, &length, 8192, 5);
+    if (length==0) {
+      snprintf(msg, 1024, "ERROR :Closing Link: Connection timeout\n");
+      write(fd, msg, strlen(msg));
+      close(fd);
+      return 0;
+    }
+    
+    char channel[8192];
+    int r=sscanf((char *)buffer, "JOIN %s", channel);
+    if (!registered) {
+      if (r==1) {
+	snprintf(msg, 1024, ":toddsircserver.com 241 * :JOIN command sent before registration\n");
+	write(fd, msg, strlen(msg));
+      }
+      if (!strncasecmp("PRIVMSG", (char *)buffer, 7)) {
+	snprintf(msg, 1024, ":toddsircserver.com 241 * :PRIVMSG command sent before registration\n");
+	write(fd, msg, strlen(msg));
+      }
+    }
+    if (!strncasecmp("QUIT", (char *)buffer, 4)) {
+      // Client is leaving
+      // if we don't close connection, there will be a SIGPIPE.
+      // be afraid.
+      snprintf(msg, 1024, "ERROR :Closing Link: Client sent QUIT\n");
+      write(fd, msg, strlen(msg));
+      close(fd);
+      return 0;
+    }
+  }
+  
+
+  close(fd);
+  return 0;
+}
+
 int main(int argc,char **argv)
 {
   signal(SIGPIPE, SIG_IGN);
@@ -114,10 +190,7 @@ int main(int argc,char **argv)
   while(1) {
     int client_sock = accept_incoming(master_socket);
     if (client_sock!=-1) {
-      char buffer[1024];
-      sprintf(buffer, ":littleirc 020 * :Heyooooo\n");
-      write(client_sock, buffer, strlen(buffer));
-      close(client_sock);
+      handle_connection(client_sock);
     }
   }
 }

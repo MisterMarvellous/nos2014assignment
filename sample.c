@@ -45,6 +45,8 @@ struct client_thread {
   char nickname[32];
 
   int state;
+#define DEAD 0
+#define ALIVE 1
   int user_command_seen;
   int user_has_registered;
   time_t timeout;
@@ -54,6 +56,12 @@ struct client_thread {
 
   int next_message;
 };
+
+// allocates the structure for the connections
+#define MAX_CLIENTS 1000
+struct client_thread threads[MAX_CLIENTS];
+// the number of connections we have open right now
+int client_count=0;
 
 pthread_rwlock_t message_log_lock;
 
@@ -126,7 +134,50 @@ int accept_incoming(int sock)
 
 int connection_count=0;
 
+int connection_made(int fd);
+
+void *client_thread_entry(void *arg) {
+  struct client_thread *t=arg;
+
+  printf("Client thread started\n");
+  // run the thread stuffs
+  connection_main(t->fd);
+  t->state=DEAD;
+  return NULL;
+}
+
 int handle_connection(int fd) {
+
+  int i;
+  for (i=0;i<client_count;++i) { if (threads[i].state==DEAD) break; }
+
+  
+
+  if (client_count>=MAX_CLIENTS) {
+    write(fd, "ERROR :Closing Link: Too many connections\n", 42);
+    close(fd);
+    return 0;
+  }
+  
+  // ADD STRUCTURE CLEARING LINE HERE
+  // MARK THE CONNECTION SLOTS AS FREE FOR REUSE WHEN A CONNECTION CLOSES
+  // memset(&threads[i],0,sizeof(struct client_thread));
+  
+  threads[i].fd = fd;
+  threads[i].state = ALIVE;
+  threads[i].thread_id = i;
+  if (pthread_create(&threads[i].thread, NULL,
+		     client_thread_entry, &threads[i])) {
+    close(fd);
+    return 0;
+  }
+
+  if (i==client_count) ++client_count;
+
+  return 0;
+}
+
+int connection_main(int fd) {
   printf("I have now seen %d connections.\n", ++connection_count);
   char msg[1024];
   sprintf(msg, ":toddsircserver.com 020 * :Heyooooo\n");

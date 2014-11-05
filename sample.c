@@ -243,5 +243,6 @@ int main(int argc,char **argv)
     if (client_sock!=-1) {
       handle_connection(client_sock);
     }
+    else usleep(10000);
   }
 }

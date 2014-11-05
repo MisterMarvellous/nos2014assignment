@@ -184,7 +184,7 @@ int connection_made(int fd);
 void *client_thread_entry(void *arg) {
   struct client_thread *t=arg;
 
-  printf("Client thread started\n");
+  //printf("Client thread started\n");
   // run the thread stuffs
   connection_main(t);
   t->state=DEAD;
@@ -269,7 +269,7 @@ int parse_line(struct client_thread *t,char *buffer) {
     }
     else {
       // Nickname is a valid length
-      printf("Saw nickname '%s'\n",nickname);
+      //printf("Saw nickname '%s'\n",nickname);
       strcpy(t->nickname,nickname);
       registration_check(t);
     }
@@ -314,7 +314,7 @@ int parse_line(struct client_thread *t,char *buffer) {
 }
 
 int connection_main(struct client_thread *t) {
-  printf("I have now seen %d connections.\n", ++connection_count);
+  //printf("I have now seen %d connections.\n", ++connection_count);
   char msg[8192];
   sprintf(msg, ":toddsircserver.com 020 * :Heyooooo\n");
   write(t->fd, msg, strlen(msg));
@@ -338,7 +338,22 @@ int connection_main(struct client_thread *t) {
 
     buffer[length]=0;
 
-    parse_line(t,(char *)buffer);
+    char line[1024];
+    int line_length=0;
+    int i;
+    for (i=0;i<length;++i) {
+      if (buffer[i]=='\n'||buffer[i]=='\r') {
+	parse_line(t,line);
+	line_length=0; line[0]=0;
+      }
+      else {
+	if (line_length<1024) {
+	  line[line_length++]=buffer[i];
+	  line[line_length]=0;
+	}
+      }
+    }
+    if (line_length>0) parse_line(t,line);
   }
 
   close(t->fd);
